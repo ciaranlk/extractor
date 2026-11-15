@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Field & Investor Data Extractor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
+  <!-- Top Bar -->
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-10">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="px-2.5 py-1 rounded-md bg-emerald-500/20 text-emerald-400 font-semibold text-xs border border-emerald-500/30">LIVE SYNC</span>
+        <h1 class="font-bold text-lg tracking-tight">Field & Investor Data Extractor</h1>
+      </div>
+      <div id="authSection" class="flex items-center gap-3">
+        <span id="userEmail" class="text-xs text-slate-400 hidden"></span>
+        <button id="loginBtn" class="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition">
+          Sign in with Google
+        </button>
+        <button id="logoutBtn" class="hidden px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition">
+          Sign out
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <!-- Left Column: Capture & Verify -->
+    <section class="lg:col-span-5 space-y-5">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+        <h2 class="font-semibold text-base text-slate-200">1. Capture Screenshot, Link, or Notes</h2>
+
+        <!-- Image Drop / Paste / Upload -->
+        <label id="dropZone" class="block border-2 border-dashed border-slate-700 hover:border-emerald-500/60 rounded-xl p-4 text-center cursor-pointer transition bg-slate-950/50">
+          <input id="imageInput" type="file" accept="image/*" class="hidden" />
+          <p class="text-sm text-slate-300 font-medium">Click to upload screenshot or paste (<kbd class="px-1.5 py-0.5 bg-slate-800 rounded text-xs">Ctrl+V</kbd>)</p>
+          <p class="text-xs text-slate-500 mt-1">Supports field trial logs, whiteboards, LinkedIn profiles, pitch decks</p>
+          <img id="imagePreview" class="hidden mt-3 max-h-44 mx-auto rounded-lg border border-slate-700" />
+        </label>
+
+        <!-- URL / Link Input -->
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Or paste a Link / URL</label>
+          <input id="urlInput" type="url" placeholder="https://linkedin.com/in/... or report URL"
+                 class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-sm focus:outline-none focus:border-emerald-500" />
+        </div>
+
+        <!-- Raw Text / Notes -->
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Additional Context / Pasted Text</label>
+          <textarea id="notesInput" rows="3" placeholder="Paste email snippet, WhatsApp message, or field observation..."
+                    class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-sm focus:outline-none focus:border-emerald-500"></textarea>
+        </div>
+
+        <button id="scanBtn" class="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 font-semibold text-sm text-white transition">
+          Scan & Extract with Gemini AI
+        </button>
+        <p id="statusMsg" class="text-xs text-slate-400 text-center min-h-[1rem]"></p>
+      </div>
+
+      <!-- Step 2: Review & Commit -->
+      <div id="reviewCard" class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold text-base text-slate-200">2. Verify & Save to Firestore</h2>
+          <select id="targetSheet" class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs font-medium text-emerald-400">
+            <option value="field_trials">Sheet: Field Trials</option>
+            <option value="investors">Sheet: Investors</option>
+          </select>
+        </div>
+
+        <div id="dynamicFields" class="space-y-3"></div>
+
+        <button id="saveBtn" class="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 font-semibold text-sm text-white transition">
+          Append Row to Live Sheet
+        </button>
+      </div>
+    </section>
+
+    <!-- Right Column: Live Firestore Tables -->
+    <section class="lg:col-span-7 space-y-6">
+      <!-- Field Trials Sheet -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+          <h3 class="font-semibold text-sm text-emerald-400">Field Trials (`field_trials`)</h3>
+          <span id="trialCount" class="text-xs text-slate-400">0 rows</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-950 text-slate-400 uppercase">
+              <tr>
+                <th class="px-3 py-2">Trial / Plot</th>
+                <th class="px-3 py-2">Crop / Variety</th>
+                <th class="px-3 py-2">Metric / Yield</th>
+                <th class="px-3 py-2">Date</th>
+                <th class="px-3 py-2">Notes</th>
+              </tr>
+            </thead>
+            <tbody id="trialsBody" class="divide-y divide-slate-800"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Investors Sheet -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+          <h3 class="font-semibold text-sm text-blue-400">Investors (`investors`)</h3>
+          <span id="investorCount" class="text-xs text-slate-400">0 rows</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-950 text-slate-400 uppercase">
+              <tr>
+                <th class="px-3 py-2">Investor / Firm</th>
+                <th class="px-3 py-2">Contact</th>
+                <th class="px-3 py-2">Stage / Ticket</th>
+                <th class="px-3 py-2">Focus</th>
+                <th class="px-3 py-2">Link / Notes</th>
+              </tr>
+            </thead>
+            <tbody id="investorsBody" class="divide-y divide-slate-800"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-app.js";
+    import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-app-check.js";
+    import { getAuth, signInWithPopup, signOut, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-auth.js";
+    import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-firestore.js";
+    import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-ai.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyB-GmnbVH_Hp8tq0LSB40a1tgiAI_uJHSQ",
+      authDomain: "data-extractor-f4f99.firebaseapp.com",
+      projectId: "data-extractor-f4f99",
+      storageBucket: "data-extractor-f4f99.firebasestorage.app",
+      messagingSenderId: "866172598418",
+      appId: "1:866172598418:web:db986247756c56e354ce4b",
+      measurementId: "G-3J41DDY0G9"
+    };
+
+    const RECAPTCHA_SITE_KEY = "6Lf7aCEuAAAAAJZjOPMFd6gInCMrYiqMzqLSikQa";
+
+    const app = initializeApp(firebaseConfig);
+    initializeAppCheck(app, {
+      provider: new ReCaptchaEnterpriseProvider(RECAPTCHA_SITE_KEY),
+      isTokenAutoRefreshEnabled: true
+    });
+
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const ai = getAI(app, { backend: new GoogleAIBackend() });
+    const model = getGenerativeModel(ai, { model: "gemini-3-flash-preview" });
+
+    const SCHEMAS = {
+      field_trials: [
+        { key: "trialName", label: "Trial / Plot ID" },
+        { key: "crop", label: "Crop / Variety" },
+        { key: "metric", label: "Key Metric / Yield" },
+        { key: "date", label: "Observation Date" },
+        { key: "notes", label: "Notes / Source" }
+      ],
+      investors: [
+        { key: "firm", label: "Investor / Firm Name" },
+        { key: "contact", label: "Contact Person & Role" },
+        { key: "stage", label: "Stage / Ticket Size" },
+        { key: "focus", label: "Thesis / Sector Focus" },
+        { key: "notes", label: "Profile URL / Notes" }
+      ]
+    };
+
+    let selectedImageBase64 = null;
+    let selectedImageMime = null;
+    let currentUser = null;
+
+    const targetSheetEl = document.getElementById("targetSheet");
+    const dynamicFieldsEl = document.getElementById("dynamicFields");
+    const statusMsg = document.getElementById("statusMsg");
+
+    function renderForm(sheet, values = {}) {
+      dynamicFieldsEl.innerHTML = SCHEMAS[sheet].map(f => `
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">${f.label}</label>
+          <input data-field="${f.key}" value="${(values[f.key] || "").replace(/"/g, "&quot;")}"
+                 class="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-sm focus:outline-none focus:border-emerald-500" />
+        </div>
+      `).join("");
+    }
+    renderForm("field_trials");
+    targetSheetEl.addEventListener("change", () => renderForm(targetSheetEl.value));
+
+    function loadImageFile(file) {
+      if (!file) return;
+      selectedImageMime = file.type;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const preview = document.getElementById("imagePreview");
+        preview.src = reader.result;
+        preview.classList.remove("hidden");
+        selectedImageBase64 = reader.result.split(",")[1];
+      };
+      reader.readAsDataURL(file);
+    }
+
+    document.getElementById("imageInput").addEventListener("change", e => loadImageFile(e.target.files[0]));
+    window.addEventListener("paste", e => {
+      const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith("image/"));
+      if (item) loadImageFile(item.getAsFile());
+    });
+
+    document.getElementById("loginBtn").onclick = () => signInWithPopup(auth, new GoogleAuthProvider());
+    document.getElementById("logoutBtn").onclick = () => signOut(auth);
+
+    onAuthStateChanged(auth, user => {
+      currentUser = user;
+      document.getElementById("loginBtn").classList.toggle("hidden", !!user);
+      document.getElementById("logoutBtn").classList.toggle("hidden", !user);
+      const emailEl = document.getElementById("userEmail");
+      emailEl.textContent = user ? user.email : "";
+      emailEl.classList.toggle("hidden", !user);
+
+      if (user) {
+        onSnapshot(query(collection(db, "field_trials"), orderBy("createdAt", "desc")), snap => {
+          document.getElementById("trialCount").textContent = `${snap.size} rows`;
+          document.getElementById("trialsBody").innerHTML = snap.docs.map(d => {
+            const r = d.data();
+            return `<tr>
+              <td class="px-3 py-2 font-medium text-slate-200">${r.trialName || "-"}</td>
+              <td class="px-3 py-2 text-slate-300">${r.crop || "-"}</td>
+              <td class="px-3 py-2 text-emerald-400">${r.metric || "-"}</td>
+              <td class="px-3 py-2 text-slate-400">${r.date || "-"}</td>
+              <td class="px-3 py-2 text-slate-400 truncate max-w-[180px]">${r.notes || "-"}</td>
+            </tr>`;
+          }).join("");
+        });
+
+        onSnapshot(query(collection(db, "investors"), orderBy("createdAt", "desc")), snap => {
+          document.getElementById("investorCount").textContent = `${snap.size} rows`;
+          document.getElementById("investorsBody").innerHTML = snap.docs.map(d => {
+            const r = d.data();
+            return `<tr>
+              <td class="px-3 py-2 font-medium text-slate-200">${r.firm || "-"}</td>
+              <td class="px-3 py-2 text-slate-300">${r.contact || "-"}</td>
+              <td class="px-3 py-2 text-blue-400">${r.stage || "-"}</td>
+              <td class="px-3 py-2 text-slate-400">${r.focus || "-"}</td>
+              <td class="px-3 py-2 text-slate-400 truncate max-w-[180px]">${r.notes || "-"}</td>
+            </tr>`;
+          }).join("");
+        });
+      }
+    });
+
+    document.getElementById("scanBtn").onclick = async () => {
+      if (!currentUser) return alert("Please sign in with Google first.");
+      const url = document.getElementById("urlInput").value.trim();
+      const notes = document.getElementById("notesInput").value.trim();
+      if (!selectedImageBase64 && !url && !notes) return alert("Add a screenshot, URL, or note first.");
+
+      statusMsg.textContent = "Scanning with Gemini AI...";
+      try {
+        const prompt = `Extract structured data from the provided image, URL, or text.
+Decide whether it belongs to "field_trials" (agricultural trials, crop metrics, plot observations) or "investors" (VC firms, angel investors, LinkedIn profiles, funding rounds).
+Return ONLY valid JSON with no markdown fences in this exact structure:
+{
+  "sheet": "field_trials" or "investors",
+  "data": {
+    // If field_trials: "trialName", "crop", "metric", "date", "notes"
+    // If investors: "firm", "contact", "stage", "focus", "notes"
+  }
+}
+URL provided: ${url || "None"}
+Notes provided: ${notes || "None"}`;
+
+        const parts = [{ text: prompt }];
+        if (selectedImageBase64) {
+          parts.push({ inlineData: { data: selectedImageBase64, mimeType: selectedImageMime } });
+        }
+
+        const result = await model.generateContent(parts);
+        const raw = result.response.text().replace(/```json|```/g, "").trim();
+        const parsed = JSON.parse(raw);
+
+        targetSheetEl.value = parsed.sheet;
+        renderForm(parsed.sheet, parsed.data);
+        statusMsg.textContent = "Extracted! Review fields below and click Append Row.";
+      } catch (err) {
+        console.error(err);
+        statusMsg.textContent = "Scan error: " + err.message;
+      }
+    };
+
+    document.getElementById("saveBtn").onclick = async () => {
+      if (!currentUser) return alert("Please sign in with Google first.");
+      const sheet = targetSheetEl.value;
+      const payload = { createdAt: serverTimestamp() };
+      dynamicFieldsEl.querySelectorAll("input[data-field]").forEach(inp => {
+        payload[inp.dataset.field] = inp.value.trim();
+      });
+
+      await addDoc(collection(db, sheet), payload);
+      statusMsg.textContent = `Saved to ${sheet}!`;
+      renderForm(sheet);
+      selectedImageBase64 = null;
+      document.getElementById("imagePreview").classList.add("hidden");
+      document.getElementById("urlInput").value = "";
+      document.getElementById("notesInput").value = "";
+    };
+  </script>
+</body>
+</html>
