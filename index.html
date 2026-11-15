@@ -12,7 +12,7 @@
     <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
       <div class="flex items-center gap-3">
         <span class="px-2.5 py-1 rounded-md bg-emerald-500/20 text-emerald-400 font-semibold text-xs border border-emerald-500/30">SHEETS SYNC</span>
-        <h1 class="font-bold text-lg tracking-tight">Field & Investor Extractor</h1>
+        <h1 class="font-bold text-lg tracking-tight">GainsBio Field & Investor Extractor</h1>
       </div>
       <div class="flex items-center gap-2">
         <span id="userEmail" class="text-xs text-slate-400 hidden sm:inline"></span>
@@ -25,18 +25,6 @@
       </div>
     </div>
   </header>
-
-  <!-- Apps Script Endpoint Config Bar -->
-  <div class="bg-slate-900/60 border-b border-slate-800">
-    <div class="max-w-7xl mx-auto px-4 py-2.5 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-      <label class="text-xs font-medium text-slate-400 whitespace-nowrap">Apps Script Web App URL:</label>
-      <input id="webhookUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec"
-             class="flex-1 px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-emerald-500" />
-      <button id="saveWebhookBtn" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-emerald-400 transition">
-        Save URL
-      </button>
-    </div>
-  </div>
 
   <main class="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
     <!-- Left Column: Capture -->
@@ -116,6 +104,8 @@
     import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-app-check.js";
     import { getAuth, signInWithPopup, signOut, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-auth.js";
     import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-ai.js";
+
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyIJAQaWt62OYkQ1gog02aRaTRMSolTz3RjlgNxjRCDCtxZ7-9y6bg1EgluydwzHgQ/exec";
 
     const firebaseConfig = {
       apiKey: "AIzaSyB-GmnbVH_Hp8tq0LSB40a1tgiAI_uJHSQ",
@@ -207,15 +197,7 @@
     const targetSelect = document.getElementById("targetSelect");
     const dynamicFieldsEl = document.getElementById("dynamicFields");
     const statusMsg = document.getElementById("statusMsg");
-    const webhookInput = document.getElementById("webhookUrl");
     const openSheetLink = document.getElementById("openSheetLink");
-
-    // Load saved Apps Script URL from browser storage
-    webhookInput.value = localStorage.getItem("https://script.google.com/a/macros/gainsbio.com/s/AKfycbyIJAQaWt62OYkQ1gog02aRaTRMSolTz3RjlgNxjRCDCtxZ7-9y6bg1EgluydwzHgQ/exec") || "";
-    document.getElementById("saveWebhookBtn").onclick = () => {
-      localStorage.setItem("gainsbio_apps_script_url", webhookInput.value.trim());
-      statusMsg.textContent = "Apps Script URL saved on this device!";
-    };
 
     function renderForm(targetKey, values = {}) {
       const columns = TAB_SCHEMAS[targetKey] || [];
@@ -322,13 +304,6 @@ Notes provided: ${notes || "None"}`;
     };
 
     document.getElementById("saveBtn").onclick = async () => {
-      const scriptUrl = webhookInput.value.trim();
-      if (!scriptUrl) {
-        alert("Please paste your Google Apps Script Web App URL in the bar at the top first!");
-        webhookInput.focus();
-        return;
-      }
-
       const [spreadsheetKey, tabName] = targetSelect.value.split("::");
       const inputs = [...dynamicFieldsEl.querySelectorAll("input[data-col-index]")];
       const rowValues = inputs.map(inp => inp.value.trim());
@@ -338,18 +313,14 @@ Notes provided: ${notes || "None"}`;
       statusMsg.textContent = `Appending row to "${tabName}"...`;
 
       try {
-        // Using text/plain avoids CORS preflight OPTIONS failure with Google Apps Script
-        const response = await fetch(scriptUrl, {
+        await fetch(APPS_SCRIPT_URL, {
           method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
           body: JSON.stringify({ spreadsheetKey, tabName, rowValues })
         });
-        const result = await response.json();
 
-        if (result.status !== "ok") {
-          throw new Error(result.message || "Unknown Apps Script error");
-        }
-
-        statusMsg.textContent = `Success! Appended row to "${tabName}".`;
+        statusMsg.textContent = `Sent to "${tabName}"! Check your Google Sheet to confirm.`;
         renderForm(targetSelect.value);
         selectedImageBase64 = null;
         document.getElementById("imagePreview").classList.add("hidden");
