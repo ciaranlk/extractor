@@ -211,7 +211,7 @@
     const openSheetLink = document.getElementById("openSheetLink");
 
     // Load saved Apps Script URL from browser storage
-    webhookInput.value = localStorage.getItem("gainsbio_apps_script_url") || "";
+    webhookInput.value = localStorage.getItem("https://script.google.com/a/macros/gainsbio.com/s/AKfycbyIJAQaWt62OYkQ1gog02aRaTRMSolTz3RjlgNxjRCDCtxZ7-9y6bg1EgluydwzHgQ/exec") || "";
     document.getElementById("saveWebhookBtn").onclick = () => {
       localStorage.setItem("gainsbio_apps_script_url", webhookInput.value.trim());
       statusMsg.textContent = "Apps Script URL saved on this device!";
